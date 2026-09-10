@@ -1,0 +1,956 @@
+From 7a5118411229c265073ab783a872c0fbbe21659d Mon Sep 17 00:00:00 2001
+From: Simon Maurer <mail@maurer.systems>
+Date: Wed, 18 Mar 2026 17:22:44 +0000
+Subject: [PATCH] drivers: remoteproc: add OpenAMP remote-side driver
+
+Add a RemoteProc driver implementation for the remote processor based on
+the OpenAMP library.
+
+This driver acts as the counterpart to the Linux remoteproc framework and
+includes support for generating the resource table from devicetree as well
+as an RPMsg VirtIO device driver.
+
+Signed-off-by: Simon Maurer <mail@maurer.systems>
+---
+ drivers/CMakeLists.txt                        |   1 +
+ drivers/Kconfig                               |   1 +
+ drivers/remoteproc/CMakeLists.txt             |  13 +
+ drivers/remoteproc/Kconfig                    |  58 ++++
+ drivers/remoteproc/resource_table.c           | 220 +++++++++++++++
+ drivers/remoteproc/rpmsg_virtio_device.c      | 258 ++++++++++++++++++
+ .../remoteproc/openamp,resource-table.yaml    |  25 ++
+ .../remoteproc/openamp,rpmsg-endpoint.yaml    |  36 +++
+ .../openamp,rpmsg-virtio-device.yaml          |  47 ++++
+ .../remoteproc/openamp,virtio-device.yaml     |  40 +++
+ dts/bindings/remoteproc/openamp,vring.yaml    |  41 +++
+ include/zephyr/drivers/remoteproc.h           |  96 +++++++
+ 12 files changed, 836 insertions(+)
+ create mode 100644 drivers/remoteproc/CMakeLists.txt
+ create mode 100644 drivers/remoteproc/Kconfig
+ create mode 100644 drivers/remoteproc/resource_table.c
+ create mode 100644 drivers/remoteproc/rpmsg_virtio_device.c
+ create mode 100644 dts/bindings/remoteproc/openamp,resource-table.yaml
+ create mode 100644 dts/bindings/remoteproc/openamp,rpmsg-endpoint.yaml
+ create mode 100644 dts/bindings/remoteproc/openamp,rpmsg-virtio-device.yaml
+ create mode 100644 dts/bindings/remoteproc/openamp,virtio-device.yaml
+ create mode 100644 dts/bindings/remoteproc/openamp,vring.yaml
+ create mode 100644 include/zephyr/drivers/remoteproc.h
+
+diff --git a/drivers/CMakeLists.txt b/drivers/CMakeLists.txt
+index 03be65342ee4..635ffcef959f 100644
+--- a/drivers/CMakeLists.txt
++++ b/drivers/CMakeLists.txt
+@@ -84,6 +84,7 @@ add_subdirectory_ifdef(CONFIG_PSI5 psi5)
+ add_subdirectory_ifdef(CONFIG_PTP_CLOCK ptp_clock)
+ add_subdirectory_ifdef(CONFIG_PWM pwm)
+ add_subdirectory_ifdef(CONFIG_REGULATOR regulator)
++add_subdirectory_ifdef(CONFIG_REMOTEPROC remoteproc)
+ add_subdirectory_ifdef(CONFIG_RESET reset)
+ add_subdirectory_ifdef(CONFIG_RETAINED_MEM retained_mem)
+ add_subdirectory_ifdef(CONFIG_RTC rtc)
+diff --git a/drivers/Kconfig b/drivers/Kconfig
+index 72e510ae79a1..920498104537 100644
+--- a/drivers/Kconfig
++++ b/drivers/Kconfig
+@@ -81,6 +81,7 @@ source "drivers/psi5/Kconfig"
+ source "drivers/ptp_clock/Kconfig"
+ source "drivers/pwm/Kconfig"
+ source "drivers/regulator/Kconfig"
++source "drivers/remoteproc/Kconfig"
+ source "drivers/reset/Kconfig"
+ source "drivers/retained_mem/Kconfig"
+ source "drivers/rtc/Kconfig"
+diff --git a/drivers/remoteproc/CMakeLists.txt b/drivers/remoteproc/CMakeLists.txt
+new file mode 100644
+index 000000000000..1995a43613e1
+--- /dev/null
++++ b/drivers/remoteproc/CMakeLists.txt
+@@ -0,0 +1,13 @@
++# SPDX-License-Identifier: Apache-2.0
++
++if(CONFIG_OPENAMP_RPMSG_VDEV OR CONFIG_OPENAMP_RESOURCE_TABLE)
++  zephyr_library()
++endif()
++
++if(CONFIG_OPENAMP_RPMSG_VDEV)
++  zephyr_library_sources(rpmsg_virtio_device.c)
++endif()
++
++if(CONFIG_OPENAMP_RESOURCE_TABLE)
++  zephyr_library_sources(resource_table.c)
++endif()
+diff --git a/drivers/remoteproc/Kconfig b/drivers/remoteproc/Kconfig
+new file mode 100644
+index 000000000000..5c4f444af769
+--- /dev/null
++++ b/drivers/remoteproc/Kconfig
+@@ -0,0 +1,58 @@
++# Copyright (c) 2026 Simon Maurer <mail@maurer.systems>
++# SPDX-License-Identifier: Apache-2.0
++
++menuconfig REMOTEPROC
++	bool "OpenAMP RemoteProc device driver"
++	help
++	  Enable support for the OpenAMP Remote Processor (RemoteProc)
++	  device driver.
++
++if REMOTEPROC
++
++config OPENAMP_RESOURCE_TABLE
++	bool "OpenAMP resource table support"
++	imply OPENAMP
++	default y
++	depends on DT_HAS_OPENAMP_RESOURCE_TABLE_ENABLED
++	help
++	  Include the OpenAMP resource table in the generated binary.
++
++	  The resource table is used by the Linux remoteproc framework
++	  and the OpenAMP library to describe shared resources such as
++	  memory regions and virtio devices.
++
++config OPENAMP_RPMSG_VDEV
++	bool "OpenAMP RPMsg VirtIO device"
++	imply OPENAMP
++	default y
++	depends on DT_HAS_OPENAMP_RPMSG_VIRTIO_DEVICE_ENABLED
++	help
++	  Enable the driver for the OpenAMP RPMsg VirtIO device.
++
++config RPMSG_VDEV_INIT_PRIORITY
++	int "RPMsg VirtIO device init priority"
++	default 40
++	depends on OPENAMP_RPMSG_VDEV
++	help
++	  Initialization priority of the RPMsg VirtIO device driver.
++
++config RPMSG_VDEV_THREAD_STACK_SIZE
++	int "RPMsg VirtIO thread stack size"
++	default 2048
++	depends on OPENAMP_RPMSG_VDEV
++	help
++	  Stack size (in bytes) used by the internal RPMsg VirtIO
++	  driver thread.
++
++config RPMSG_VDEV_THREAD_PRIORITY
++	int "RPMsg VirtIO thread priority"
++	default 8
++	depends on OPENAMP_RPMSG_VDEV
++	help
++	  Thread priority of the RPMsg VirtIO driver thread.
++
++module = RPROC
++module-str = rproc
++source "subsys/logging/Kconfig.template.log_config"
++
++endif # REMOTEPROC
+diff --git a/drivers/remoteproc/resource_table.c b/drivers/remoteproc/resource_table.c
+new file mode 100644
+index 000000000000..f3df5cc94acb
+--- /dev/null
++++ b/drivers/remoteproc/resource_table.c
+@@ -0,0 +1,220 @@
++/*
++ * Copyright (c) 2020 STMicroelectronics
++ * Copyright (c) 2024 Maurer Systems GmbH
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/*
++ * In addition to the standard ELF segments, most remote processors would
++ * also include a special section which we call "the resource table".
++ *
++ * The resource table contains system resources that the remote processor
++ * requires before it should be powered on, such as allocation of physically
++ * contiguous memory, or iommu mapping of certain on-chip peripherals.
++
++ * In addition to system resources, the resource table may also contain
++ * resource entries that publish the existence of supported features
++ * or configurations by the remote processor, such as trace buffers and
++ * supported virtio devices (and their configurations).
++
++ * Dependencies:
++ *   to be compliant with Linux kernel OS the resource table must be linked in a
++ *   specific section named ".resource_table".
++
++ * Related documentation:
++ *   https://www.kernel.org/doc/Documentation/remoteproc.txt
++ *   https://github.com/OpenAMP/open-amp/wiki/OpenAMP-Life-Cycle-Management
++ */
++
++#include <zephyr/kernel.h>
++
++#include <zephyr/linker/devicetree_regions.h>
++#include <zephyr/drivers/remoteproc.h>
++#include <zephyr/logging/log.h>
++
++#include <openamp/remoteproc.h>
++#include <openamp/virtio.h>
++
++LOG_MODULE_REGISTER(rsc_table, CONFIG_RPROC_LOG_LEVEL);
++
++extern char ram_console_buf[];
++
++#define VRING_ALIGNMENT       16 /* fixed to match with Linux constraint */
++#define RPMSG_IPU_C0_FEATURES 1
++
++#define RESOURCE_TABLE_ATTR                                                                        \
++__attribute__((__section__(DT_PROP(VDEV_NODE, resource_table)))))
++#define __resource Z_GENERIC_SECTION(.resource_table)
++
++#define RESOURCE_TABLE_NODE DT_CHOSEN(openamp_resource_table)
++
++#define NUM_CARVEOUTS DT_PROP_LEN(RESOURCE_TABLE_NODE, carveouts)
++#define NUM_VDEVS     DT_PROP_LEN(RESOURCE_TABLE_NODE, vdevs)
++
++#define VDEV_INDEX(idx) vdev_##idx
++
++#define CARVEOUT_OFFSET(node_id, prop, idx) offsetof(struct fw_resource_table, carveouts[idx]),
++
++#define CARVEOUT_ENTRY(node_id, prop, idx)                                                         \
++	(struct fw_rsc_carveout){                                                                  \
++		.type = RSC_CARVEOUT,                                                              \
++		.da = DT_REG_ADDR(DT_PHANDLE_BY_IDX(node_id, prop, idx)),                          \
++		.pa = DT_REG_ADDR(DT_PHANDLE_BY_IDX(node_id, prop, idx)),                          \
++		.len = DT_REG_SIZE(DT_PHANDLE_BY_IDX(node_id, prop, idx)),                         \
++		.flags = 0,                                                                        \
++		.name = DT_PROP_BY_PHANDLE_IDX(node_id, carveouts, idx, zephyr_memory_region)},
++
++#define VRING_ENTRY(node_id, prop, idx, ...)                                                       \
++	.vrings[idx] = (struct fw_rsc_vdev_vring){                                                 \
++		.da = DT_PROP_BY_PHANDLE_IDX(node_id, prop, idx, device_address),                  \
++		.align = VRING_ALIGNMENT,                                                          \
++		.num = DT_PROP_BY_PHANDLE_IDX(node_id, prop, idx, num_buffers),                    \
++		.notifyid = DT_PROP_BY_PHANDLE_IDX(node_id, prop, idx, notify_id),                 \
++	},
++
++#define VDEV_ENTRY(node_id, prop, idx)                                                             \
++	.VDEV_INDEX(idx) = {                                                                       \
++		.vdev =                                                                            \
++			(struct fw_rsc_vdev){                                                      \
++				.type = RSC_VDEV,                                                  \
++				.id = DT_PROP_BY_PHANDLE_IDX(node_id, prop, idx, device_id),       \
++				.notifyid = 0,                                                     \
++				.dfeatures = RPMSG_IPU_C0_FEATURES,                                \
++				.gfeatures = 0,                                                    \
++				.config_len = 0,                                                   \
++				.status = 0,                                                       \
++				.num_of_vrings = DT_PROP_LEN(                                      \
++					DT_PHANDLE_BY_IDX(node_id, prop, idx), vrings),            \
++			},                                                                         \
++		DT_FOREACH_PROP_ELEM_VARGS(DT_PHANDLE_BY_IDX(node_id, prop, idx), vrings,          \
++					   VRING_ENTRY)},
++
++#define VDEV_FIELD(node_id, prop, idx)                                                             \
++	struct {                                                                                   \
++		struct fw_rsc_vdev vdev;                                                           \
++		struct fw_rsc_vdev_vring                                                           \
++			vrings[DT_PROP_LEN(DT_PHANDLE_BY_IDX(node_id, prop, idx), vrings)];        \
++	} vdev_##idx;
++
++#define FOREACH_CARVEOUT(fn)
++#define CARVEOUT_ENTRIES FOREACH_CARVEOUT(CARVEOUT_ENTRY)
++
++enum rsc_table_entries {
++#if NUM_CARVEOUTS > 0
++	RSC_TABLE_CARVEOUT_ENTRIES = NUM_CARVEOUTS - 1,
++#endif
++#if NUM_VDEVS > 0
++	RSC_TABLE_VDEV_ENTRY = NUM_CARVEOUTS + NUM_VDEVS - 1,
++#endif
++#if defined(CONFIG_RAM_CONSOLE)
++	RSC_TABLE_TRACE_ENTRY,
++#endif
++	RSC_TABLE_NUM_ENTRIES
++};
++
++#define VRING_FIELD(node_id, prop, idx) vdev_##idx;
++
++#define VDEV_OFFSET(node_id, prop, idx)     offsetof(struct fw_resource_table, vdev_##idx),
++#define CARVEOUT_OFFSET(node_id, prop, idx) offsetof(struct fw_resource_table, carveouts[idx]),
++
++struct fw_resource_table {
++	struct resource_table hdr;
++	uint32_t offset[RSC_TABLE_NUM_ENTRIES];
++#if NUM_CARVEOUTS > 0
++	struct fw_rsc_carveout carveouts[NUM_CARVEOUTS];
++#endif
++	DT_FOREACH_PROP_ELEM(RESOURCE_TABLE_NODE, vdevs, VDEV_FIELD)
++#if defined(CONFIG_RAM_CONSOLE)
++	struct fw_rsc_trace cm_trace;
++#endif
++} METAL_PACKED_END __aligned(8) resource_table __resource = {
++	.hdr = {
++			.ver = 1,
++			.num = RSC_TABLE_NUM_ENTRIES,
++		},
++
++	.offset = {
++			DT_FOREACH_PROP_ELEM(RESOURCE_TABLE_NODE, carveouts, CARVEOUT_OFFSET)
++				DT_FOREACH_PROP_ELEM(RESOURCE_TABLE_NODE, vdevs, VDEV_OFFSET)
++
++#if defined(CONFIG_RAM_CONSOLE)
++					offsetof(struct fw_resource_table, cm_trace),
++#endif
++		},
++
++#if NUM_CARVEOUTS > 0
++	.carveouts = {DT_FOREACH_PROP_ELEM(RESOURCE_TABLE_NODE, carveouts, CARVEOUT_ENTRY)},
++#endif
++	DT_FOREACH_PROP_ELEM(RESOURCE_TABLE_NODE, vdevs, VDEV_ENTRY)
++
++#if defined(CONFIG_RAM_CONSOLE)
++		.cm_trace = {
++			.type = RSC_TRACE,
++			.da = (uint32_t)ram_console_buf,
++			.len = CONFIG_RAM_CONSOLE_BUFFER_SIZE,
++			.name = "Zephyr_log",
++		},
++#endif
++};
++
++#if NUM_VDEVS > 0
++#define VDEV_LUT_ENTRY(node_id, prop, idx)                                                         \
++	{.index = DT_REG_ADDR(DT_PHANDLE_BY_IDX(node_id, prop, idx)),                              \
++	 &resource_table.VDEV_INDEX(idx).vdev},
++
++static struct {
++	unsigned int index;
++	struct fw_rsc_vdev *vdev;
++} vdev_lut[] = {DT_FOREACH_PROP_ELEM(RESOURCE_TABLE_NODE, vdevs, VDEV_LUT_ENTRY)};
++#endif
++
++void *z_rproc_rsc_table(size_t *size)
++{
++	if (size) {
++		*size = sizeof(resource_table);
++	}
++
++	return &resource_table;
++}
++
++struct fw_rsc_carveout *z_rproc_get_carveout_by_name(const char *name)
++{
++#if NUM_CARVEOUTS > 0
++	struct fw_resource_table *rsc_table = &resource_table;
++
++	for (int i = 0; i < NUM_CARVEOUTS; i++) {
++		if (strcmp(rsc_table->carveouts[i].name, name) == 0) {
++			return &rsc_table->carveouts[i];
++		}
++	}
++#endif
++	return NULL;
++}
++
++struct fw_rsc_carveout *z_rproc_get_carveout_by_index(unsigned int idx)
++{
++#if NUM_CARVEOUTS > 0
++	struct fw_resource_table *rsc_table = &resource_table;
++
++	if (idx >= NUM_CARVEOUTS) {
++		return NULL;
++	}
++
++	return &rsc_table->carveouts[idx];
++#else
++	return NULL;
++#endif
++}
++
++struct fw_rsc_vdev *z_rproc_get_vdev(unsigned int idx)
++{
++#if NUM_VDEVS > 0
++	for (int i = 0; i < NUM_VDEVS; i++) {
++		if (vdev_lut[i].index == idx) {
++			return vdev_lut[i].vdev;
++		}
++	}
++#endif
++	return NULL;
++}
+diff --git a/drivers/remoteproc/rpmsg_virtio_device.c b/drivers/remoteproc/rpmsg_virtio_device.c
+new file mode 100644
+index 000000000000..41f72eca68c3
+--- /dev/null
++++ b/drivers/remoteproc/rpmsg_virtio_device.c
+@@ -0,0 +1,258 @@
++/*
++ * Copyright (c) 2024 Maurer Systems GmbH
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#define DT_DRV_COMPAT openamp_rpmsg_virtio_device
++
++#include <stdio.h>
++
++#include <zephyr/logging/log.h>
++#include <zephyr/kernel.h>
++#include <zephyr/device.h>
++
++#include <zephyr/drivers/mbox.h>
++#include <zephyr/drivers/remoteproc.h>
++
++#include <metal/sys.h>
++#include <metal/io.h>
++#include <openamp/virtio.h>
++#include <openamp/remoteproc.h>
++#include <openamp/remoteproc_virtio.h>
++#include <openamp/rpmsg_virtio.h>
++
++#include <zephyr/logging/log.h>
++LOG_MODULE_REGISTER(rpmsg_vdev, CONFIG_RPROC_LOG_LEVEL);
++
++struct carveout_region {
++	metal_phys_addr_t pa;
++	struct metal_io_region region;
++};
++
++struct rvdev_config {
++	struct mbox_dt_spec mbox_tx;
++	struct mbox_dt_spec mbox_rx;
++	const char *tx_mr_name;
++	const char *rx_mr_name;
++	const char *buffer_mr_name;
++	unsigned int idx;
++};
++
++struct rvdev_data {
++	struct virtio_device *vdev;
++	struct rpmsg_virtio_device rvdev;
++	struct k_thread thread;
++	struct k_sem sem;
++	k_timeout_t poll_time;
++	struct metal_io_region mr_rsc_table;
++	struct carveout_region cr_vring_tx;
++	struct carveout_region cr_vring_rx;
++	struct carveout_region cr_buffer;
++
++	K_KERNEL_STACK_MEMBER(stack, CONFIG_RPMSG_VDEV_THREAD_STACK_SIZE);
++};
++
++static int rvdev_notify(void *priv, uint32_t id)
++{
++	const struct device *dev = priv;
++	const struct rvdev_config *config = dev->config;
++
++	return mbox_send_dt(&config->mbox_tx, NULL);
++}
++
++static void rvdev_reset_callback(struct virtio_device *vdev)
++{
++	LOG_INF("vdev_reset_callback");
++}
++
++static void rpmsg_ns_bind_callback(struct rpmsg_device *rdev, const char *name, uint32_t dest)
++{
++	LOG_INF("rpmsg_ns_bind_callback");
++}
++
++static void mbox_callback(const struct device *dev, uint32_t channel, void *user_data,
++			  struct mbox_msg *msg_data)
++{
++	struct k_sem *sem = user_data;
++
++	ARG_UNUSED(dev);
++	ARG_UNUSED(channel);
++	ARG_UNUSED(msg_data);
++	k_sem_give(sem);
++}
++
++static void rvdev_rx_thread(void *dev_ptr, void *p2, void *p3)
++{
++	const struct device *dev = dev_ptr;
++	struct rvdev_data *data = dev->data;
++
++	ARG_UNUSED(p2);
++	ARG_UNUSED(p3);
++
++	for (;;) {
++		k_sem_take(&data->sem, data->poll_time);
++		rproc_virtio_notified(data->vdev, RSC_NOTIFY_ID_ANY);
++	}
++}
++
++static int carveout_region_init(struct carveout_region *co_region, const char *name)
++{
++	const struct fw_rsc_carveout *carveout = z_rproc_get_carveout_by_name(name);
++
++	if (!carveout) {
++		LOG_ERR("carvout %s not found", name);
++		return -ENOENT;
++	}
++
++	co_region->pa = carveout->pa;
++
++	metal_io_init(&co_region->region, (void *)carveout->da, &co_region->pa, carveout->len, -1,
++		      carveout->flags, NULL);
++	return 0;
++}
++
++static int rvdev_init(const struct device *dev)
++{
++	const struct rvdev_config *config = dev->config;
++	struct rvdev_data *data = dev->data;
++
++	size_t rsc_table_size;
++	void *rsc_table = z_rproc_rsc_table(&rsc_table_size);
++	const struct fw_rsc_vdev *rsc_vdev = z_rproc_get_vdev(config->idx);
++	const struct fw_rsc_vdev_vring *rsc_vrings[2];
++
++	int ret;
++	k_tid_t tid;
++
++	if (!rsc_table || !rsc_vdev) {
++		LOG_ERR("resource table incomplete");
++		return -ENOENT;
++	}
++
++	if (rsc_vdev->num_of_vrings != 2) {
++		LOG_ERR("invalid number of vrings in resource table %u", rsc_vdev->num_of_vrings);
++		return -EBADE;
++	}
++
++	rsc_vrings[0] = &rsc_vdev->vring[0];
++
++	rsc_vrings[1] = &rsc_vdev->vring[1];
++
++	data->poll_time = K_MSEC(10);
++
++	ret = k_sem_init(&data->sem, 0, 1);
++
++	if (ret) {
++		LOG_ERR("k_sem_init failed %d", ret);
++		return ret;
++	}
++
++	ret = mbox_register_callback_dt(&config->mbox_rx, mbox_callback, &data->sem);
++	if (ret) {
++		LOG_ERR("mbox_register_callback_dt failed %d", ret);
++		return ret;
++	}
++
++	ret = mbox_set_enabled_dt(&config->mbox_rx, true);
++	if (ret) {
++		LOG_ERR("mbox_set_enabled_dt failed %d", ret);
++		return ret;
++	}
++
++	metal_io_init(&data->mr_rsc_table, rsc_table, (metal_phys_addr_t *)rsc_table,
++		      rsc_table_size, -1, 0, NULL);
++
++	ret = carveout_region_init(&data->cr_vring_tx, config->tx_mr_name);
++	if (ret) {
++		return ret;
++	}
++
++	ret = carveout_region_init(&data->cr_vring_rx, config->rx_mr_name);
++	if (ret) {
++		return ret;
++	}
++
++	ret = carveout_region_init(&data->cr_buffer, config->buffer_mr_name);
++	if (ret) {
++		return ret;
++	}
++
++	data->vdev = rproc_virtio_create_vdev(VIRTIO_DEV_DEVICE, 0xFF, (void *)rsc_vdev,
++					      &data->mr_rsc_table, (void *)dev, rvdev_notify,
++					      rvdev_reset_callback);
++
++	if (!data->vdev) {
++		LOG_ERR("rproc_virtio_create_vdev failed");
++		return -1;
++	}
++
++	ret = rproc_virtio_init_vring(data->vdev, 0, rsc_vrings[0]->notifyid,
++				      (void *)rsc_vrings[0]->da, &data->cr_vring_tx.region,
++				      rsc_vrings[0]->num, rsc_vrings[0]->align);
++	if (ret) {
++		LOG_ERR("failed to init vring 0");
++		return ret;
++	}
++
++	ret = rproc_virtio_init_vring(data->vdev, 1, rsc_vrings[1]->notifyid,
++				      (void *)rsc_vrings[1]->da, &data->cr_vring_rx.region,
++				      rsc_vrings[1]->num, rsc_vrings[1]->align);
++	if (ret) {
++		LOG_ERR("failed to init vring 0");
++		return ret;
++	}
++
++	rproc_virtio_wait_remote_ready(data->vdev);
++
++	ret = rpmsg_init_vdev(&data->rvdev, data->vdev, rpmsg_ns_bind_callback,
++			      &data->cr_buffer.region, NULL);
++
++	if (ret) {
++		LOG_ERR("rpmsg_init_vdev failed\r\n");
++		return ret;
++	}
++
++	tid = k_thread_create(&data->thread, data->stack, K_THREAD_STACK_SIZEOF(data->stack),
++			      rvdev_rx_thread, (void *)dev, NULL, NULL,
++			      CONFIG_RPMSG_VDEV_THREAD_PRIORITY, 0, K_NO_WAIT);
++
++	k_thread_name_set(tid, "rvdev");
++
++	return 0;
++}
++
++struct rpmsg_device *z_rproc_get_rpmsg_device(const struct device *dev)
++{
++	struct rvdev_data *data = dev->data;
++
++	return rpmsg_virtio_get_rpmsg_device(&data->rvdev);
++}
++
++#define VDEV_VRING_BY_NAME(inst, name) DT_INST_PHANDLE_BY_NAME(inst, vrings, name)
++#define VDEV_VRING_MEMORY_REGION_BY_NAME(inst, name)                                               \
++	DT_PROP(VDEV_VRING_BY_NAME(inst, name), memory_region)
++
++#define VDEV_DT_MBOX_SPEC_BY_NAME(inst, name)                                                      \
++	{                                                                                          \
++		.dev = DEVICE_DT_GET(                                                              \
++			DT_PHANDLE_BY_IDX(VDEV_VRING_BY_NAME(inst, name), mboxes, 0)),             \
++		.channel_id = DT_PHA_BY_IDX(VDEV_VRING_BY_NAME(inst, name), mboxes, 0, channel),   \
++	}
++
++#define DEFINE_RPMSG_VIRTIO_DEVICE(i)                                                              \
++	static const struct rvdev_config rvdev_config_##i = {                                      \
++		.idx = i,                                                                          \
++		.mbox_tx = VDEV_DT_MBOX_SPEC_BY_NAME(i, tx),                                       \
++		.mbox_rx = VDEV_DT_MBOX_SPEC_BY_NAME(i, rx),                                       \
++		.tx_mr_name =                                                                      \
++			DT_PROP(VDEV_VRING_MEMORY_REGION_BY_NAME(i, tx), zephyr_memory_region),    \
++		.rx_mr_name =                                                                      \
++			DT_PROP(VDEV_VRING_MEMORY_REGION_BY_NAME(i, rx), zephyr_memory_region),    \
++		.buffer_mr_name = DT_PROP(DT_INST_PROP(i, memory_region), zephyr_memory_region),   \
++	};                                                                                         \
++	static struct rvdev_data rvdev_data_##i = {};                                              \
++	DEVICE_DT_INST_DEFINE(i, &rvdev_init, NULL, &rvdev_data_##i, &rvdev_config_##i,            \
++			      POST_KERNEL, CONFIG_RPMSG_VDEV_INIT_PRIORITY, NULL);
++
++DT_INST_FOREACH_STATUS_OKAY(DEFINE_RPMSG_VIRTIO_DEVICE)
+diff --git a/dts/bindings/remoteproc/openamp,resource-table.yaml b/dts/bindings/remoteproc/openamp,resource-table.yaml
+new file mode 100644
+index 000000000000..2609ac01301e
+--- /dev/null
++++ b/dts/bindings/remoteproc/openamp,resource-table.yaml
+@@ -0,0 +1,25 @@
++# Copyright (c) 2024 Maurer Systems GmbH
++# SPDX-License-Identifier: Apache-2.0
++
++description: |
++  Binding for describing the remoteproc resource table used by OpenAMP.
++
++  The resource table defines shared memory regions and virtio devices
++  required for inter-processor communication.
++
++compatible: "openamp,resource-table"
++
++properties:
++  carveouts:
++    type: phandles
++    required: true
++    description: |
++      Phandles to memory regions reserved as carveouts for shared memory
++      used by OpenAMP.
++
++  vdevs:
++    type: phandles
++    required: true
++    description: |
++      Phandles to virtio device nodes associated with the OpenAMP
++      resource table.
+diff --git a/dts/bindings/remoteproc/openamp,rpmsg-endpoint.yaml b/dts/bindings/remoteproc/openamp,rpmsg-endpoint.yaml
+new file mode 100644
+index 000000000000..0c8b6d81283b
+--- /dev/null
++++ b/dts/bindings/remoteproc/openamp,rpmsg-endpoint.yaml
+@@ -0,0 +1,36 @@
++# Copyright (c) 2024 Maurer Systems GmbH
++# SPDX-License-Identifier: Apache-2.0
++
++description: |
++  Binding for an OpenAMP RPMsg endpoint.
++
++  This node represents an RPMsg endpoint used for communication between
++  processors. It defines the local and remote endpoint addresses and
++  the service type associated with the endpoint.
++
++compatible: "openamp,rpmsg-endpoint"
++
++include: base.yaml
++
++on-bus: rpmsg
++
++properties:
++  reg:
++    required: true
++    description: |
++      Endpoint addresses in the form <src dst>, where:
++        - src: local endpoint address
++        - dst: remote endpoint address
++
++  type:
++    type: string
++    required: true
++    description: |
++      RPMsg service name associated with the endpoint.
++
++      Common values include:
++        - "rpmsg-tty"
++        - "rpmsg-raw"
++
++      These names may be used by the remote system (e.g. Linux)
++      to bind the appropriate RPMsg driver.
+diff --git a/dts/bindings/remoteproc/openamp,rpmsg-virtio-device.yaml b/dts/bindings/remoteproc/openamp,rpmsg-virtio-device.yaml
+new file mode 100644
+index 000000000000..3cbd626725e0
+--- /dev/null
++++ b/dts/bindings/remoteproc/openamp,rpmsg-virtio-device.yaml
+@@ -0,0 +1,47 @@
++# Copyright (c) 2024 Maurer Systems GmbH
++# SPDX-License-Identifier: Apache-2.0
++
++description: |
++  Binding for an OpenAMP RPMsg VirtIO device.
++
++  This node represents a VirtIO device implementing the RPMsg protocol
++  over OpenAMP. It defines the shared memory used for RPMsg buffers and
++  configuration parameters for the associated worker thread.
++
++compatible: "openamp,rpmsg-virtio-device"
++
++include: openamp,virtio-device.yaml
++
++bus: rpmsg
++
++properties:
++  device-id:
++    default: 7
++    description: |
++      VirtIO device identifier. Defaults to 7 (VIRTIO_ID_RPMSG)
++      as defined by the VirtIO specification.
++
++  memory-region:
++    type: phandle
++    required: true
++    description: |
++      Phandle to the shared memory region used for RPMsg buffers.
++
++  zephyr,priority:
++    type: array
++    description: |
++      Workqueue thread priority for this RPMsg instance.
++
++      The value is an array consisting of:
++        - priority level
++        - priority type
++
++      The priority type must be one of:
++        - PRIO_COOP     (cooperative priority)
++        - PRIO_PREEMPT  (preemptive priority)
++
++      Examples:
++        K_PRIO_COOP(1)     -> <1 PRIO_COOP>
++        K_PRIO_PREEMPT(2)  -> <2 PRIO_PREEMPT>
++
++      If not specified, a default priority of <0 PRIO_PREEMPT> is used.
+diff --git a/dts/bindings/remoteproc/openamp,virtio-device.yaml b/dts/bindings/remoteproc/openamp,virtio-device.yaml
+new file mode 100644
+index 000000000000..e2ec480f9bd3
+--- /dev/null
++++ b/dts/bindings/remoteproc/openamp,virtio-device.yaml
+@@ -0,0 +1,40 @@
++# Copyright (c) 2024 Maurer Systems GmbH
++# SPDX-License-Identifier: Apache-2.0
++
++description: |
++  Binding for a generic OpenAMP VirtIO device.
++
++  This node represents a VirtIO device backed by OpenAMP. It references
++  one or more vrings (virtqueues) used for communication between
++  processors.
++
++compatible: "openamp,virtio-device"
++
++include: base.yaml
++
++properties:
++  device-id:
++    type: int
++    description: |
++      VirtIO device identifier as defined by the VirtIO specification.
++
++  vrings:
++    type: phandle-array
++    required: true
++    description: |
++      Phandle array referencing the vring nodes associated with this
++      VirtIO device.
++
++  vring-names:
++    type: string-array
++    required: true
++    description: |
++      Names corresponding to each entry in the "vrings" property.
++      These names identify the role of each vring.
++
++  "#vring-cells":
++    type: int
++    const: 0
++    description: |
++      Number of cells in a vring specifier. Must be 0 since vrings
++      do not require additional specifier data.
+diff --git a/dts/bindings/remoteproc/openamp,vring.yaml b/dts/bindings/remoteproc/openamp,vring.yaml
+new file mode 100644
+index 000000000000..cd00327442e0
+--- /dev/null
++++ b/dts/bindings/remoteproc/openamp,vring.yaml
+@@ -0,0 +1,41 @@
++# Copyright (c) 2024 Maurer Systems GmbH
++# SPDX-License-Identifier: Apache-2.0
++
++description: |
++  Binding for an OpenAMP virtio vring.
++
++  A vring represents a virtqueue used for communication between processors.
++  It defines the shared memory region, notification mechanism, and buffer
++  configuration used by OpenAMP.
++
++compatible: "openamp,vring"
++
++include: base.yaml
++
++properties:
++  notify-id:
++    type: int
++    required: true
++    description: |
++      Identifier used for notifications (e.g. mailbox or interrupt ID)
++      associated with this vring.
++
++  device-address:
++    type: int
++    default: -1
++    description: |
++      Device address of the vring in the remote processor address space.
++      A value of -1 indicates that the address is assigned dynamically.
++
++  memory-region:
++    type: phandle
++    required: true
++    description: |
++      Phandle to the shared memory region used to store the vring
++      descriptors, available ring, and used ring.
++
++  num-buffers:
++    type: int
++    required: true
++    description: |
++      Number of buffers (descriptors) in the vring.
+diff --git a/include/zephyr/drivers/remoteproc.h b/include/zephyr/drivers/remoteproc.h
+new file mode 100644
+index 000000000000..36962cbc032b
+--- /dev/null
++++ b/include/zephyr/drivers/remoteproc.h
+@@ -0,0 +1,96 @@
++/*
++ * Copyright (c) 2026 Simon Maurer <mail@maurer.systems>
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#ifndef ZEPHYR_INCLUDE_DRIVERS_REMOTEPROC_H_
++#define ZEPHYR_INCLUDE_DRIVERS_REMOTEPROC_H_
++
++#include <errno.h>
++#include <stdint.h>
++#include <stdlib.h>
++
++#include <zephyr/device.h>
++#include <zephyr/devicetree.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* Forward declarations for OpenAMP resource structures */
++struct fw_rsc_carveout;
++struct fw_rsc_vdev;
++
++#ifdef CONFIG_OPENAMP_RPMSG_VDEV
++struct rpmsg_device;
++#endif
++
++/**
++ * @brief Get pointer to the OpenAMP resource table
++ *
++ * Returns a pointer to the resource table included in the firmware image.
++ * The resource table describes shared memory regions, virtio devices,
++ * and other resources used for inter-processor communication.
++ *
++ * @param size Pointer to a variable that will be filled with the size
++ *             of the resource table in bytes.
++ *
++ * @return Pointer to the resource table, or NULL if not available.
++ */
++void *z_rproc_rsc_table(size_t *size);
++
++/**
++ * @brief Get carveout resource by name
++ *
++ * Searches the resource table for a carveout entry with the given name.
++ *
++ * @param name Null-terminated string identifying the carveout.
++ *
++ * @return Pointer to the carveout resource, or NULL if not found.
++ */
++struct fw_rsc_carveout *z_rproc_get_carveout_by_name(const char *name);
++
++/**
++ * @brief Get carveout resource by index
++ *
++ * Retrieves a carveout entry from the resource table by index.
++ *
++ * @param idx Index of the carveout entry.
++ *
++ * @return Pointer to the carveout resource, or NULL if the index
++ *         is out of range.
++ */
++struct fw_rsc_carveout *z_rproc_get_carveout_by_index(unsigned int idx);
++
++/**
++ * @brief Get VirtIO device resource
++ *
++ * Retrieves a VirtIO device entry from the resource table.
++ *
++ * @param idx Index of the VirtIO device entry.
++ *
++ * @return Pointer to the vdev resource, or NULL if the index
++ *         is out of range.
++ */
++struct fw_rsc_vdev *z_rproc_get_vdev(unsigned int idx);
++
++#ifdef CONFIG_OPENAMP_RPMSG_VDEV
++
++/**
++ * @brief Get RPMsg device associated with a RemoteProc instance
++ *
++ * Returns the RPMsg device corresponding to the given Zephyr device.
++ *
++ * @param dev Pointer to the Zephyr device instance.
++ *
++ * @return Pointer to the RPMsg device, or NULL if not available.
++ */
++struct rpmsg_device *z_rproc_get_rpmsg_device(const struct device *dev);
++
++#endif /* CONFIG_OPENAMP_RPMSG_VDEV */
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* ZEPHYR_INCLUDE_DRIVERS_REMOTEPROC_H_ */

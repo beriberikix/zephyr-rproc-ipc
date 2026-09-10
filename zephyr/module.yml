@@ -1,0 +1,8 @@
+name: zephyr-rproc-ipc
+build:
+  cmake: .
+  kconfig: Kconfig
+  settings:
+    dts_root: .
+samples:
+  - samples

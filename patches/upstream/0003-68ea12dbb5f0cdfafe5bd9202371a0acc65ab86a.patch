@@ -1,0 +1,222 @@
+From 68ea12dbb5f0cdfafe5bd9202371a0acc65ab86a Mon Sep 17 00:00:00 2001
+From: Simon Maurer <mail@maurer.systems>
+Date: Wed, 18 Mar 2026 17:53:55 +0000
+Subject: [PATCH] logging: backend: add RPMsg log backend
+
+Add a logging backend that transmits log output over an OpenAMP
+RPMsg VirtIO device.
+
+If the RPMsg channel is not available, the backend falls back to
+the RAM console.
+
+Signed-off-by: Simon Maurer <mail@maurer.systems>
+---
+ subsys/logging/backends/CMakeLists.txt      |   5 +
+ subsys/logging/backends/Kconfig             |   1 +
+ subsys/logging/backends/Kconfig.rpmsg       |  25 ++++
+ subsys/logging/backends/log_backend_rpmsg.c | 136 ++++++++++++++++++++
+ 4 files changed, 167 insertions(+)
+ create mode 100644 subsys/logging/backends/Kconfig.rpmsg
+ create mode 100644 subsys/logging/backends/log_backend_rpmsg.c
+
+diff --git a/subsys/logging/backends/CMakeLists.txt b/subsys/logging/backends/CMakeLists.txt
+index 0ea59ce481ae..e269ad450ca0 100644
+--- a/subsys/logging/backends/CMakeLists.txt
++++ b/subsys/logging/backends/CMakeLists.txt
+@@ -50,6 +50,11 @@ zephyr_sources_ifdef(
+   log_backend_rtt.c
+ )
+ 
++zephyr_sources_ifdef(
++  CONFIG_LOG_BACKEND_RPMSG
++  log_backend_rpmsg.c
++)
++
+ zephyr_include_directories_ifdef(
+   CONFIG_LOG_BACKEND_SPINEL
+   ${ZEPHYR_BASE}/subsys/net/lib/openthread/platform/
+diff --git a/subsys/logging/backends/Kconfig b/subsys/logging/backends/Kconfig
+index 98d3217e75f6..23b4dadd6bd0 100644
+--- a/subsys/logging/backends/Kconfig
++++ b/subsys/logging/backends/Kconfig
+@@ -12,6 +12,7 @@ rsource "Kconfig.mqtt"
+ rsource "Kconfig.native_posix"
+ rsource "Kconfig.net"
+ rsource "Kconfig.ws"
++rsource "Kconfig.rpmsg"
+ rsource "Kconfig.rtt"
+ rsource "Kconfig.spinel"
+ rsource "Kconfig.swo"
+diff --git a/subsys/logging/backends/Kconfig.rpmsg b/subsys/logging/backends/Kconfig.rpmsg
+new file mode 100644
+index 000000000000..04726b652b87
+--- /dev/null
++++ b/subsys/logging/backends/Kconfig.rpmsg
+@@ -0,0 +1,25 @@
++# Copyright (c) 2026 Simon Maurer <mail@maurer.systems>
++# SPDX-License-Identifier: Apache-2.0
++
++config LOG_BACKEND_RPMSG
++	bool "OpenAMP RPMsg log backend"
++	depends on REMOTEPROC
++	help
++	  Enable a logging backend that transmits log output over an
++	  RPMsg channel using OpenAMP.
++
++	  If the RPMsg channel is not yet available, logs are written
++	  to the RAM console as a fallback.
++
++	  Note:
++	  The host (e.g. Linux) must send an initial message on the
++	  RPMsg channel to establish the connection before log output
++	  is transmitted.
++
++if LOG_BACKEND_RPMSG
++
++backend = RPMSG
++backend-str = rpmsg
++source "subsys/logging/Kconfig.template.log_format_config"
++
++endif # LOG_BACKEND_RPMSG
+diff --git a/subsys/logging/backends/log_backend_rpmsg.c b/subsys/logging/backends/log_backend_rpmsg.c
+new file mode 100644
+index 000000000000..820f4d2b90e0
+--- /dev/null
++++ b/subsys/logging/backends/log_backend_rpmsg.c
+@@ -0,0 +1,136 @@
++/*
++ * Copyright (c) 2024 Maurer Systems GmbH
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++#include <zephyr/kernel.h>
++#include <zephyr/sys/printk.h>
++#include <zephyr/logging/log_backend.h>
++#include <zephyr/logging/log_core.h>
++#include <zephyr/logging/log_output.h>
++#include <zephyr/logging/log_backend_std.h>
++#include <zephyr/drivers/remoteproc.h>
++
++#include <openamp/rpmsg.h>
++#include <openamp/rpmsg_virtio.h>
++#include <openamp/remoteproc.h>
++#include <openamp/remoteproc_virtio.h>
++
++#define EPT_NODE   DT_CHOSEN(zephyr_log_rpmsg)
++#define RVDEV_NODE DT_BUS(EPT_NODE)
++
++static volatile bool ept_ready;
++static volatile bool in_panic;
++static uint32_t log_format_current;
++static uint8_t rpmsg_output_buf[128];
++static struct rpmsg_endpoint ept_log;
++static const struct device *rvdev = DEVICE_DT_GET(RVDEV_NODE);
++
++static int rpmsg_log_callback(struct rpmsg_endpoint *ept, void *data, size_t len, uint32_t src,
++			      void *priv)
++{
++	static bool set;
++
++	ARG_UNUSED(ept);
++	ARG_UNUSED(data);
++	ARG_UNUSED(len);
++	ARG_UNUSED(src);
++	ARG_UNUSED(priv);
++
++	if (!set) {
++		ept_ready = true;
++		set = true;
++	}
++
++	return RPMSG_SUCCESS;
++}
++
++static void rpmsg_log_unbind(struct rpmsg_endpoint *ept)
++{
++	ept_ready = false;
++}
++
++#if defined(CONFIG_RAM_CONSOLE)
++void *__printk_get_hook(void);
++#endif
++
++static int char_out(uint8_t *data, size_t length, void *ctx)
++{
++	if (ept_ready && !in_panic) {
++		int r = rpmsg_send(&ept_log, data, length);
++
++		if (r >= 0) {
++			return length;
++		}
++	}
++
++#if defined(CONFIG_RAM_CONSOLE)
++	int (*_char_out)(int c) = __printk_get_hook();
++
++	if (_char_out) {
++		for (int cnt = 0; cnt < length; cnt++) {
++			_char_out(data[cnt]);
++		}
++	}
++#endif
++
++	return length;
++}
++
++LOG_OUTPUT_DEFINE(log_output_rpmsg, char_out, rpmsg_output_buf, sizeof(rpmsg_output_buf));
++
++static void lb_rpmsg_process(const struct log_backend *backend, union log_msg_generic *msg)
++{
++	uint32_t flags = log_backend_std_get_flags();
++	log_format_func_t log_output_func = log_format_func_t_get(log_format_current);
++
++	log_output_func(&log_output_rpmsg, &msg->log, flags);
++}
++
++static void lb_rpmsg_panic(struct log_backend const *backend)
++{
++	in_panic = true;
++	log_backend_std_panic(&log_output_rpmsg);
++}
++
++static void lb_rpmsg_dropped(const struct log_backend *const backend, uint32_t cnt)
++{
++	ARG_UNUSED(backend);
++
++	log_backend_std_dropped(&log_output_rpmsg, cnt);
++}
++
++static int lb_rpmsg_format_set(const struct log_backend *backend, uint32_t log_type)
++{
++	log_format_current = log_type;
++	return 0;
++}
++
++static void lb_rpmsg_init(const struct log_backend *backend)
++{
++	struct rpmsg_device *rdev = z_rproc_get_rpmsg_device(rvdev);
++	uint32_t dest_addr = RPMSG_ADDR_ANY;
++	int ret;
++
++#if DT_REG_HAS_IDX(EPT_NODE, 1)
++	dest_addr = DT_REG_ADDR_BY_IDX(EPT_NODE, 1);
++#endif
++
++	ret = rpmsg_create_ept(&ept_log, rdev, DT_PROP(EPT_NODE, type), DT_REG_ADDR(EPT_NODE),
++			       dest_addr, rpmsg_log_callback, rpmsg_log_unbind);
++
++	if (ret) {
++		return;
++	}
++}
++
++const struct log_backend_api log_backend_rpmsg_api = {
++	.process = lb_rpmsg_process,
++	.dropped = lb_rpmsg_dropped,
++	.panic = lb_rpmsg_panic,
++	.init = lb_rpmsg_init,
++	.format_set = lb_rpmsg_format_set,
++};
++
++LOG_BACKEND_DEFINE(backend_rpmsg_service, log_backend_rpmsg_api, true);

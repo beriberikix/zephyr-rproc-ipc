@@ -1,0 +1,25 @@
+From 4bf2f7375d07badf9586a18b15175a0395236817 Mon Sep 17 00:00:00 2001
+From: Simon Maurer <mail@maurer.systems>
+Date: Wed, 18 Mar 2026 16:25:10 +0000
+Subject: [PATCH] dts: vendor-prefixes: add openamp
+
+Add the "openamp" vendor prefix for virtual devices
+using the OpenAMP library.
+
+Signed-off-by: Simon Maurer <mail@maurer.systems>
+---
+ dts/bindings/vendor-prefixes.txt | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/dts/bindings/vendor-prefixes.txt b/dts/bindings/vendor-prefixes.txt
+index 465032f2627e..fc54d5018a92 100644
+--- a/dts/bindings/vendor-prefixes.txt
++++ b/dts/bindings/vendor-prefixes.txt
+@@ -526,6 +526,7 @@ onion	Onion Corporation
+ onnn	ON Semiconductor Corp.
+ ontat	On Tat Industrial Company
+ opalkelly	Opal Kelly Incorporated
++openamp	OpenAMP
+ opencores	OpenCores.org
+ openhwgroup	OpenHW Group
+ openisa	open-isa.org
