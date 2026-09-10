@@ -1,0 +1,93 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * i.MX95 Cortex-M7 as a Linux remoteproc remote. Addresses, sizes and names
+ * match the reserved-memory nodes in NXP's Linux devicetree for the i.MX95
+ * EVK and FRDM-IMX95 (vdev0vring0, vdev0vring1, vdevbuffer, rsc-table): the
+ * carveout names must equal the Linux node names, or Linux allocates a second
+ * carveout of its own for each one instead of using the reserved region.
+ */
+
+/ {
+	chosen {
+		openamp,resource-table = &rsc_table;
+	};
+
+	vdev0vring0: memory@88000000 {
+		compatible = "zephyr,memory-region";
+		zephyr,memory-region = "vdev0vring0";
+		reg = <0x88000000 0x8000>;
+	};
+
+	vdev0vring1: memory@88008000 {
+		compatible = "zephyr,memory-region";
+		zephyr,memory-region = "vdev0vring1";
+		reg = <0x88008000 0x8000>;
+	};
+
+	vdevbuffer: memory@88020000 {
+		compatible = "zephyr,memory-region";
+		zephyr,memory-region = "vdevbuffer";
+		reg = <0x88020000 0x100000>;
+	};
+
+	rsc_table_mem: memory@88220000 {
+		compatible = "zephyr,memory-region";
+		zephyr,memory-region = "rsc-table";
+		reg = <0x88220000 0x1000>;
+	};
+
+	remoteproc {
+		rsc_table: resource-table {
+			compatible = "openamp,resource-table";
+			carveouts = <&vdev0vring0 &vdev0vring1 &vdevbuffer>;
+			vdevs = <&vdev0>;
+			/* Linux reads and updates the table here, not where it is linked. */
+			memory-region = <&rsc_table_mem>;
+		};
+
+		vrings {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			vdev0_tx: vring@0 {
+				compatible = "openamp,vring";
+				reg = <0>;
+				#vring-cells = <0>;
+				notify-id = <0>;
+				device-address = <0x88000000>;
+				memory-region = <&vdev0vring0>;
+				num-buffers = <8>;
+				mboxes = <&mu7 1>;
+			};
+
+			vdev0_rx: vring@1 {
+				compatible = "openamp,vring";
+				reg = <1>;
+				#vring-cells = <0>;
+				notify-id = <1>;
+				device-address = <0x88008000>;
+				memory-region = <&vdev0vring1>;
+				num-buffers = <8>;
+				mboxes = <&mu7 1>;
+			};
+		};
+
+		vdevs {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			vdev0: vdev@0 {
+				compatible = "openamp,rpmsg-virtio-device";
+				reg = <0>;
+				vrings = <&vdev0_tx &vdev0_rx>;
+				vring-names = "tx", "rx";
+				memory-region = <&vdevbuffer>;
+			};
+		};
+	};
+};
+
+&mu7 {
+	status = "okay";
+};
