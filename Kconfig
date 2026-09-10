@@ -4,5 +4,6 @@ menu "Remoteproc IPC (out-of-tree)"
 
 rsource "drivers/remoteproc/Kconfig"
 rsource "subsys/ipc/ipc_service/backends/Kconfig.rproc_rpmsg"
+rsource "subsys/mgmt/mcumgr/transport/Kconfig.ipc"
 
 endmenu

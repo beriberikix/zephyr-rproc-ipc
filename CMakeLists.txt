@@ -11,3 +11,7 @@ add_subdirectory_ifdef(CONFIG_REMOTEPROC drivers/remoteproc)
 zephyr_sources_ifdef(CONFIG_IPC_SERVICE_BACKEND_RPROC_RPMSG
   subsys/ipc/ipc_service/backends/ipc_rproc_rpmsg.c
 )
+
+zephyr_sources_ifdef(CONFIG_MCUMGR_TRANSPORT_IPC
+  subsys/mgmt/mcumgr/transport/src/smp_ipc.c
+)

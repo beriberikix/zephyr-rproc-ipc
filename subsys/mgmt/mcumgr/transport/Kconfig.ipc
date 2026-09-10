@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# Kconfig macro arguments cannot contain commas.
+DT_CHOSEN_Z_IPC_MCUMGR := zephyr,ipc-mcumgr
+
+menuconfig MCUMGR_TRANSPORT_IPC
+	bool "IPC service MCUmgr SMP transport"
+	depends on MCUMGR
+	depends on IPC_SERVICE
+	depends on $(dt_chosen_enabled,$(DT_CHOSEN_Z_IPC_MCUMGR))
+	select MCUMGR_TRANSPORT_REASSEMBLY
+	help
+	  Carry MCUmgr SMP packets over one endpoint of the IPC service
+	  instance chosen as zephyr,ipc-mcumgr, with no framing beyond the SMP
+	  header. Packets longer than one IPC message are split and rejoined,
+	  so MCUMGR_TRANSPORT_NETBUF_SIZE, not the backend's buffer size,
+	  bounds the packet size.
+
+if MCUMGR_TRANSPORT_IPC
+
+config MCUMGR_TRANSPORT_IPC_ENDPOINT_NAME
+	string "Endpoint name"
+	default "mcumgr"
+	help
+	  Name the SMP endpoint is registered under. For RPMsg to a Linux host
+	  this is the channel name the host sees; give it a name of its own so
+	  the host can tell it apart from other endpoints on the same link.
+
+config MCUMGR_TRANSPORT_IPC_TX_WAIT_MS
+	int "Transmit buffer wait (ms)"
+	default 1000
+	help
+	  How long each outgoing fragment waits for the peer to free a
+	  transmit buffer before the response is abandoned.
+
+module = MCUMGR_TRANSPORT_IPC
+module-str = MCUmgr IPC transport
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # MCUMGR_TRANSPORT_IPC
