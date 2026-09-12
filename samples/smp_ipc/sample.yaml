@@ -1,0 +1,13 @@
+sample:
+  name: smp over ipc
+  description: MCUmgr SMP server over the IPC service
+tests:
+  sample.rproc_ipc.smp_ipc:
+    platform_allow:
+      - imx95_evk/mimx9596/m7
+    integration_platforms:
+      - imx95_evk/mimx9596/m7
+    build_only: true
+    tags:
+      - ipc
+      - remoteproc

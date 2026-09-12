@@ -1,0 +1,13 @@
+sample:
+  name: rpmsg echo
+  description: Echo messages on a raw OpenAMP rpmsg endpoint
+tests:
+  sample.rproc_ipc.rpmsg_echo:
+    platform_allow:
+      - imx95_evk/mimx9596/m7
+    integration_platforms:
+      - imx95_evk/mimx9596/m7
+    build_only: true
+    tags:
+      - ipc
+      - remoteproc

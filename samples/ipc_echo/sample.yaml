@@ -1,0 +1,13 @@
+sample:
+  name: ipc service echo
+  description: Echo on two IPC service endpoints over one rpmsg link
+tests:
+  sample.rproc_ipc.ipc_echo:
+    platform_allow:
+      - imx95_evk/mimx9596/m7
+    integration_platforms:
+      - imx95_evk/mimx9596/m7
+    build_only: true
+    tags:
+      - ipc
+      - remoteproc
