@@ -15,3 +15,7 @@ zephyr_sources_ifdef(CONFIG_IPC_SERVICE_BACKEND_RPROC_RPMSG
 zephyr_sources_ifdef(CONFIG_MCUMGR_TRANSPORT_IPC
   subsys/mgmt/mcumgr/transport/src/smp_ipc.c
 )
+
+zephyr_sources_ifdef(CONFIG_IPC_LOOPBACK
+  tests/common/fake_ipc_backend.c
+)

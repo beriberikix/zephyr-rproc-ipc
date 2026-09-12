@@ -1,0 +1,24 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/ {
+	/* Same link-id: what ipc_a sends, ipc_b receives, and back. */
+	ipc_a: ipc_a {
+		compatible = "zephyr,ipc-loopback";
+		link-id = <0>;
+		status = "okay";
+	};
+
+	ipc_b: ipc_b {
+		compatible = "zephyr,ipc-loopback";
+		link-id = <0>;
+		status = "okay";
+	};
+
+	/* Unique link-id: echoes to its own endpoint. */
+	ipc_echo: ipc_echo {
+		compatible = "zephyr,ipc-loopback";
+		link-id = <1>;
+		mtu = <64>;
+		status = "okay";
+	};
+};

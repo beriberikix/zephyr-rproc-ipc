@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig IPC_LOOPBACK
+	bool "Loopback IPC service backend (test only)"
+	depends on IPC_SERVICE
+	depends on DT_HAS_ZEPHYR_IPC_LOOPBACK_ENABLED
+	help
+	  A backend that delivers messages on a worker thread instead of the
+	  sender's, optionally to a paired instance. It lets code built on the
+	  IPC service - including request/response layers that send while
+	  holding a lock - be tested on native_sim with no hardware.
+
+if IPC_LOOPBACK
+
+config IPC_LOOPBACK_MAX_MTU
+	int "Largest message any instance carries"
+	default 496
+
+config IPC_LOOPBACK_QUEUE_LEN
+	int "Messages buffered per instance"
+	default 8
+
+config IPC_LOOPBACK_STACK_SIZE
+	int "Delivery thread stack size"
+	default 2048
+
+config IPC_LOOPBACK_THREAD_PRIORITY
+	int "Delivery thread priority"
+	default 5
+
+endif # IPC_LOOPBACK

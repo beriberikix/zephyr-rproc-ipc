@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  Test-only IPC service backend that delivers messages on a worker thread.
+
+  Two instances sharing a "link-id" are paired: what one sends, the other
+  receives. An instance whose link-id is unique echoes to its own endpoint.
+  Pairing is by id rather than by phandle because two nodes pointing at each
+  other form a devicetree dependency cycle, which leaves both without an
+  ordinal and fails the build.
+
+  Delivery never happens on the sender's thread, which matters for anything
+  built on request/response: a synchronous loopback would re-enter the caller
+  while it still holds its transmit lock.
+
+compatible: "zephyr,ipc-loopback"
+
+include: base.yaml
+
+properties:
+  link-id:
+    type: int
+    required: true
+    description: Instances sharing this id are paired with each other.
+
+  mtu:
+    type: int
+    default: 496
+    description: Largest message this link carries, as rpmsg's 512-byte buffers give 496.
