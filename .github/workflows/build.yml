@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the module
+        uses: actions/checkout@v4
+        with:
+          path: zephyr-rproc-ipc
+
+      - name: Set up Zephyr and the Arm toolchain
+        uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: zephyr-rproc-ipc
+          toolchains: arm-zephyr-eabi
+
+      # Runs on the host: the loopback backend stands in for a real link.
+      - name: Run the tests on native_sim
+        run: west twister -T zephyr-rproc-ipc/tests -p native_sim --inline-logs
+
+      # The samples all need a Linux host on the other side of the link, so
+      # there is nothing to run - building them is the regression gate.
+      - name: Build the samples for the i.MX95 M7
+        run: >
+          west twister -T zephyr-rproc-ipc/samples
+          -p imx95_evk/mimx9596/m7 --build-only --inline-logs

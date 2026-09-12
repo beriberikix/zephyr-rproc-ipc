@@ -48,6 +48,19 @@ echo zephyr.elf > /sys/class/remoteproc/remoteprocN/firmware
 echo start > /sys/class/remoteproc/remoteprocN/state
 ```
 
+## Testing
+
+```sh
+west twister -T tests -p native_sim                                  # runs on the host
+west twister -T samples -p imx95_evk/mimx9596/m7 --build-only        # regression gate
+```
+
+The samples need a Linux host on the other side of the link, so they are
+built, not run. Everything that can be exercised without hardware is tested
+against `CONFIG_IPC_LOOPBACK`, a backend that delivers on a worker thread and
+enforces an MTU, so code that chunks its writes or waits for a reply can be
+tested on `native_sim`. Both commands are what CI runs.
+
 ## Notes
 
 - An RPMsg endpoint cannot address the host until the host has sent it a

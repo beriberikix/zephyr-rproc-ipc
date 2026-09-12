@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Manifest for building this module on its own, as CI does. A project that
+# already has a Zephyr workspace should instead add this repository to its own
+# manifest, or point ZEPHYR_EXTRA_MODULES at a checkout.
+
+manifest:
+  self:
+    path: zephyr-rproc-ipc
+
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: v4.4.0
+      import:
+        # Only what the samples and tests need: OpenAMP and libmetal for the
+        # rpmsg stack, hal_nxp and CMSIS for the i.MX95 M7, picolibc for the
+        # Arm builds.
+        name-allowlist:
+          - cmsis
+          - cmsis_6
+          - hal_nxp
+          - libmetal
+          - open-amp
+          - picolibc
