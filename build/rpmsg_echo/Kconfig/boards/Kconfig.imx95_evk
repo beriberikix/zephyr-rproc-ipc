@@ -1,0 +1,2 @@
+# Load board Kconfig descriptions.
+osource "/home/jonathan.beri@canonical.com/code/zephyr/boards/nxp/imx95_evk/Kconfig.imx95_evk"

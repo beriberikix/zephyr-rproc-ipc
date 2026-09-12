@@ -1,0 +1,93 @@
+menu "pouch (/home/jonathan.beri@canonical.com/code/modules/lib/pouch)"
+osource "/home/jonathan.beri@canonical.com/code/modules/lib/pouch/port/zephyr/Kconfig"
+config ZEPHYR_POUCH_MODULE
+	bool
+	default y
+endmenu
+menu "cmsis (/home/jonathan.beri@canonical.com/code/modules/hal/cmsis)"
+osource "$(ZEPHYR_CMSIS_KCONFIG)"
+config ZEPHYR_CMSIS_MODULE
+	bool
+	default y
+endmenu
+menu "cmsis_6 (/home/jonathan.beri@canonical.com/code/modules/hal/cmsis_6)"
+osource "$(ZEPHYR_CMSIS_6_KCONFIG)"
+config ZEPHYR_CMSIS_6_MODULE
+	bool
+	default y
+endmenu
+menu "hal_nordic (/home/jonathan.beri@canonical.com/code/modules/hal/nordic)"
+osource "$(ZEPHYR_HAL_NORDIC_KCONFIG)"
+config ZEPHYR_HAL_NORDIC_MODULE
+	bool
+	default y
+
+config ZEPHYR_HAL_NORDIC_MODULE_BLOBS
+	bool
+endmenu
+menu "hal_nxp (/home/jonathan.beri@canonical.com/code/modules/hal/nxp)"
+osource "$(ZEPHYR_HAL_NXP_KCONFIG)"
+config ZEPHYR_HAL_NXP_MODULE
+	bool
+	default y
+
+config ZEPHYR_HAL_NXP_MODULE_BLOBS
+	bool
+endmenu
+config ZEPHYR_LIBMETAL_MODULE
+	bool
+	default y
+menu "littlefs (/home/jonathan.beri@canonical.com/code/modules/fs/littlefs)"
+osource "$(ZEPHYR_LITTLEFS_KCONFIG)"
+config ZEPHYR_LITTLEFS_MODULE
+	bool
+	default y
+endmenu
+menu "mbedtls (/home/jonathan.beri@canonical.com/code/modules/crypto/mbedtls)"
+osource "$(ZEPHYR_MBEDTLS_KCONFIG)"
+config ZEPHYR_MBEDTLS_MODULE
+	bool
+	default y
+endmenu
+config ZEPHYR_MCUBOOT_MODULE
+	bool
+	default y
+config ZEPHYR_OPEN_AMP_MODULE
+	bool
+	default y
+menu "picolibc (/home/jonathan.beri@canonical.com/code/modules/lib/picolibc)"
+osource "/home/jonathan.beri@canonical.com/code/modules/lib/picolibc/zephyr/Kconfig"
+config ZEPHYR_PICOLIBC_MODULE
+	bool
+	default y
+endmenu
+menu "segger (/home/jonathan.beri@canonical.com/code/modules/debug/segger)"
+osource "$(ZEPHYR_SEGGER_KCONFIG)"
+config ZEPHYR_SEGGER_MODULE
+	bool
+	default y
+endmenu
+config ZEPHYR_TF_PSA_CRYPTO_MODULE
+	bool
+	default y
+menu "trusted-firmware-m (/home/jonathan.beri@canonical.com/code/modules/tee/tf-m/trusted-firmware-m)"
+osource "$(ZEPHYR_TRUSTED_FIRMWARE_M_KCONFIG)"
+config ZEPHYR_TRUSTED_FIRMWARE_M_MODULE
+	bool
+	default y
+endmenu
+menu "zcbor (/home/jonathan.beri@canonical.com/code/modules/lib/zcbor)"
+osource "$(ZEPHYR_ZCBOR_KCONFIG)"
+config ZEPHYR_ZCBOR_MODULE
+	bool
+	default y
+endmenu
+menu "zephyr-rproc-ipc (/home/jonathan.beri@canonical.com/code/zephyr-rproc-ipc)"
+osource "/home/jonathan.beri@canonical.com/code/zephyr-rproc-ipc/Kconfig"
+config ZEPHYR_ZEPHYR_RPROC_IPC_MODULE
+	bool
+	default y
+endmenu
+config ZEPHYR_NRF_HW_MODELS_MODULE
+	bool
+	default y

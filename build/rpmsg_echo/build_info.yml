@@ -1,0 +1,57 @@
+cmake:
+  application:
+    configuration-dir: '/home/jonathan.beri@canonical.com/code/zephyr-rproc-ipc/samples/rpmsg_echo'
+    source-dir: '/home/jonathan.beri@canonical.com/code/zephyr-rproc-ipc/samples/rpmsg_echo'
+  board:
+    name: 'imx95_evk'
+    path:
+     - '/home/jonathan.beri@canonical.com/code/zephyr/boards/nxp/imx95_evk'
+    qualifiers: 'mimx9596/m7'
+    revision: ''
+  devicetree:
+    bindings-dirs:
+     - '/home/jonathan.beri@canonical.com/code/zephyr-rproc-ipc/dts/bindings'
+     - '/home/jonathan.beri@canonical.com/code/zephyr/dts/bindings'
+    files:
+     - '/home/jonathan.beri@canonical.com/code/zephyr/boards/nxp/imx95_evk/imx95_evk_mimx9596_m7.dts'
+     - '/home/jonathan.beri@canonical.com/code/zephyr-rproc-ipc/samples/rpmsg_echo/boards/imx95_evk_mimx9596_m7.overlay'
+    include-dirs:
+     - '/home/jonathan.beri@canonical.com/code/modules/hal/nxp/dts'
+     - '/home/jonathan.beri@canonical.com/code/zephyr-rproc-ipc/include'
+     - '/home/jonathan.beri@canonical.com/code/zephyr-rproc-ipc/include/zephyr'
+     - '/home/jonathan.beri@canonical.com/code/zephyr-rproc-ipc/dts'
+     - '/home/jonathan.beri@canonical.com/code/zephyr/include'
+     - '/home/jonathan.beri@canonical.com/code/zephyr/include/zephyr'
+     - '/home/jonathan.beri@canonical.com/code/zephyr/dts/common'
+     - '/home/jonathan.beri@canonical.com/code/zephyr/dts/vendor'
+     - '/home/jonathan.beri@canonical.com/code/zephyr/dts/rx'
+     - '/home/jonathan.beri@canonical.com/code/zephyr/dts/x86'
+     - '/home/jonathan.beri@canonical.com/code/zephyr/dts/xtensa'
+     - '/home/jonathan.beri@canonical.com/code/zephyr/dts/sparc'
+     - '/home/jonathan.beri@canonical.com/code/zephyr/dts/riscv'
+     - '/home/jonathan.beri@canonical.com/code/zephyr/dts/posix'
+     - '/home/jonathan.beri@canonical.com/code/zephyr/dts/arm64'
+     - '/home/jonathan.beri@canonical.com/code/zephyr/dts/arm'
+     - '/home/jonathan.beri@canonical.com/code/zephyr/dts/arc'
+     - '/home/jonathan.beri@canonical.com/code/zephyr/dts'
+    user-files:
+     - '/home/jonathan.beri@canonical.com/code/zephyr-rproc-ipc/samples/rpmsg_echo/boards/imx95_evk_mimx9596_m7.overlay'
+  kconfig:
+    files:
+     - '/home/jonathan.beri@canonical.com/code/zephyr/boards/nxp/imx95_evk/imx95_evk_mimx9596_m7_defconfig'
+     - '/home/jonathan.beri@canonical.com/code/zephyr-rproc-ipc/samples/rpmsg_echo/prj.conf'
+     - '/home/jonathan.beri@canonical.com/code/zephyr-rproc-ipc/samples/rpmsg_echo/boards/imx95_evk_mimx9596_m7.conf'
+    user-files:
+     - '/home/jonathan.beri@canonical.com/code/zephyr-rproc-ipc/samples/rpmsg_echo/prj.conf'
+     - '/home/jonathan.beri@canonical.com/code/zephyr-rproc-ipc/samples/rpmsg_echo/boards/imx95_evk_mimx9596_m7.conf'
+  toolchain:
+    name: 'zephyr'
+    path: '/home/jonathan.beri@canonical.com/zephyr-sdk-1.0.1'
+  zephyr:
+    version: '4.4.0'
+    zephyr-base: '/home/jonathan.beri@canonical.com/code/zephyr'
+version: '0.1.0'
+west:
+  command: '/home/jonathan.beri@canonical.com/code/.venv/bin/west build -p -b imx95_evk/mimx9596/m7 samples/rpmsg_echo -d build/rpmsg_echo -- -DZEPHYR_EXTRA_MODULES=/home/jonathan.beri@canonical.com/code/zephyr-rproc-ipc'
+  topdir: '/home/jonathan.beri@canonical.com/code'
+  version: '1.5.0'

@@ -5,6 +5,7 @@
 #
 #   deploy.sh root@192.0.2.10 samples/ipc_echo
 #   deploy.sh --board imx95_evk/mimx9596/m7 root@board samples/smp_ipc
+#   deploy.sh --core imx-rproc root@board samples/ipc_echo
 #   deploy.sh --dry-run root@board samples/ipc_echo   # print, do nothing
 #
 # There is no flasher and no debug probe in this: the firmware is a file the
@@ -18,6 +19,9 @@ set -euo pipefail
 board=imx95_evk/mimx9596/m7
 dry_run=false
 remote_dir=/tmp/zephyr-rproc
+# An i.MX95 has more than one remote core - the M7 and the NPU - so the one to
+# load has to be named. rproc.py refuses to guess, rightly.
+core=imx-rproc
 
 usage() {
     sed -n '3,12p' "$0" | sed 's/^# \{0,1\}//'
@@ -27,6 +31,7 @@ usage() {
 while [[ $# -gt 0 ]]; do
     case $1 in
         --board) board=${2:?--board needs a value}; shift 2 ;;
+        --core) core=${2:?--core needs a value}; shift 2 ;;
         --remote-dir) remote_dir=${2:?--remote-dir needs a value}; shift 2 ;;
         --dry-run) dry_run=true; shift ;;
         -h|--help) usage 0 ;;
@@ -74,6 +79,6 @@ run scp -q "$elf" "$here/rproc.py" "$target:$remote_dir/"
 
 # Loading stops the core, so anything holding a /dev/rpmsgN will see it go.
 echo "==> loading it on the remote core"
-run ssh "$target" "python3 $remote_dir/rproc.py load $remote_dir/zephyr.elf"
+run ssh "$target" "python3 $remote_dir/rproc.py --name $core load $remote_dir/zephyr.elf"
 
 echo "==> done; the core is running $(basename "$sample")"

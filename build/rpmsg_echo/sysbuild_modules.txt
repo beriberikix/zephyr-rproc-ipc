@@ -1,0 +1,1 @@
+"mcuboot":"/home/jonathan.beri@canonical.com/code/bootloader/mcuboot":"/home/jonathan.beri@canonical.com/code/bootloader/mcuboot/boot/zephyr/sysbuild"

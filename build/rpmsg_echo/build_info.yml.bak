@@ -1,0 +1,5 @@
+west:
+  command: /home/jonathan.beri@canonical.com/code/.venv/bin/west build -p -b imx95_evk/mimx9596/m7
+    samples/rpmsg_echo -d build/rpmsg_echo -- -DZEPHYR_EXTRA_MODULES=/home/jonathan.beri@canonical.com/code/zephyr-rproc-ipc
+  topdir: /home/jonathan.beri@canonical.com/code
+  version: 1.5.0
