@@ -27,6 +27,11 @@ jobs:
           app-path: zephyr-rproc-ipc
           toolchains: arm-zephyr-eabi
 
+      # The scripts are the host's half, and the board is not needed to check
+      # that they do the right things in the right order.
+      - name: Test the host scripts
+        run: python3 -m pytest zephyr-rproc-ipc/scripts -q
+
       # Runs on the host: the loopback backend stands in for a real link.
       - name: Run the tests on native_sim
         run: west twister -T zephyr-rproc-ipc/tests -p native_sim --inline-logs

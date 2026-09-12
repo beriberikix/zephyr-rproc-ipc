@@ -12,6 +12,7 @@ its Zephyr-tree path, so a commit here applies to a Zephyr checkout as a patch.
 | IPC service backend over that RPMsg device (`zephyr,ipc-rproc-rpmsg`) | `subsys/ipc/ipc_service/backends/` | New |
 | MCUmgr SMP transport over the IPC service (`MCUMGR_TRANSPORT_IPC`) | `subsys/mgmt/mcumgr/transport/` | New |
 | UDP relay so `smpmgr`/`mcumgr` reach the SMP endpoint from Linux | `scripts/smp_rpmsg_relay.py` | New |
+| Loading and managing the firmware from Linux, with no flasher | `scripts/rproc.py`, `scripts/deploy.sh` | New |
 
 ## Fixes on top of #105778
 
@@ -48,11 +49,35 @@ echo zephyr.elf > /sys/class/remoteproc/remoteprocN/firmware
 echo start > /sys/class/remoteproc/remoteprocN/state
 ```
 
+## Building and running it, without a flasher
+
+A core loaded through remoteproc needs no flasher and no debug probe: the
+firmware is a file the kernel is pointed at, and the core is started and
+stopped through sysfs. `scripts/rproc.py` wraps that up, and
+`scripts/deploy.sh` is the whole inner loop.
+
+```sh
+scripts/deploy.sh root@192.0.2.10 samples/ipc_echo   # build, copy, load, start
+scripts/deploy.sh --dry-run root@board samples/ipc_echo   # print what it would do
+
+# on the board
+rproc.py find     # the instances, their state, and what firmware they hold
+rproc.py load build/zephyr/zephyr.elf
+rproc.py state
+rproc.py log      # the remote's trace buffers, from debugfs
+```
+
+Loading stops the core first, because the kernel refuses the firmware name
+while it runs, and waits for the `/dev/rpmsgN` nodes afterwards, because a
+restart tears every one of them down and makes them again - so anything
+holding one has to reopen it.
+
 ## Testing
 
 ```sh
 west twister -T tests -p native_sim                                  # runs on the host
 west twister -T samples -p imx95_evk/mimx9596/m7 --build-only        # regression gate
+pytest scripts                                                       # the host scripts
 ```
 
 The samples need a Linux host on the other side of the link, so they are
